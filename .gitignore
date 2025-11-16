@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+.env
+venv/
+
+# Node/Vite
+node_modules/
+web/node_modules/
+web/dist/
+
+# Firebase
+firebase-debug.log
+.serviceAccountKey.json
+*.secret.json
+
+# OS/Editor
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Local Netlify folder
+.netlify
