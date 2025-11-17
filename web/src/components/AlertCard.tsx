@@ -7,7 +7,7 @@ interface AlertCardProps {
 }
 
 const SENSOR_LABELS: Record<string, { title: string; units: string; valueKey: string }> = {
-  flood: { title: 'Flood level', units: 'cm', valueKey: 'value' },
+  flood: { title: 'Water level', units: 'cm', valueKey: 'value' },
   temperature: { title: 'Temperature', units: '°C', valueKey: 'value' },
   gas: { title: 'Gas concentration', units: '', valueKey: 'value' },
   motion: { title: 'Motion detected', units: '', valueKey: 'value' },

@@ -60,6 +60,13 @@ const levelDescriptions: Record<1 | 2 | 3, string> = {
   3: 'Immediate action recommended—conditions are dangerous.',
 }
 
+const recentAlertTimestampFormatter = new Intl.DateTimeFormat(undefined, {
+  month: 'short',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
 function computeLocalFloodRisk(inputs: FloodRiskInput): FloodRiskResponse {
   let score = 0
 
@@ -102,7 +109,7 @@ function buildLocalSummary(payload: AlertSummaryRequest): string {
   const alerts = payload.lastAlerts.slice(0, 3)
   const alertLines = alerts
     .map(alert => {
-      const when = new Date(alert.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      const when = recentAlertTimestampFormatter.format(new Date(alert.timestamp))
       const reading = alert.value != null ? `${alert.value}` : 'n/a'
       return `  - ${alert.sensor} (${alert.level}) · ${reading} at ${when}`
     })
@@ -605,7 +612,7 @@ export default function App(): React.ReactElement {
         console.error('Predict flood risk failed', error)
         const fallback = computeLocalFloodRisk(riskPayload)
         setLatestPrediction(fallback)
-        setRiskError('Cloud AI temporarily unavailable — showing local estimate.')
+        setRiskError('Using the latest sensor estimate while we refresh the full briefing.')
       })
       .finally(() => {
         setRiskLoading(false)
@@ -747,6 +754,14 @@ export default function App(): React.ReactElement {
                 Search by city
               </label>
               <div className="location-input-wrapper">
+                <span className="location-search-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                    <path
+                      d="M15.5 14h-.79l-.28-.27a6 6 0 1 0-.71.71l.27.28v.79L20 20.5 21.5 19zm-5 0a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9z"
+                      fill="currentColor"
+                    />
+                  </svg>
+                </span>
                 <input
                   ref={locationInputRef}
                   id="location-input"
@@ -784,6 +799,11 @@ export default function App(): React.ReactElement {
                       ))}
                   </div>
                 )}
+                <span className="location-divider" aria-hidden="true" />
+                <button type="button" className="location-mode" disabled>
+                  Location
+                  <span className="location-mode-caret" aria-hidden="true">▾</span>
+                </button>
               </div>
               <button type="submit" className="location-submit" disabled={locationLoading}>
                 Set location

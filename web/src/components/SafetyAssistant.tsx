@@ -23,6 +23,68 @@ interface AssistantCopy {
   actions: string[]
 }
 
+function formatLevelLabel(level: string | undefined | null): string {
+  if (!level) return 'info'
+  return level.charAt(0).toUpperCase() + level.slice(1)
+}
+
+function buildOfflineCopy(
+  tone: Tone,
+  prediction: FloodRiskResponse | null,
+  weather: WeatherSnapshot | null,
+  latestAlert: AlertDocument | null
+): AssistantCopy {
+  const location = weather?.location || 'your area'
+  const sensorName = latestAlert?.sensor ? latestAlert.sensor.toLowerCase() : 'local sensor'
+  const alertLevel = formatLevelLabel(latestAlert?.level)
+  const rawReading = typeof latestAlert?.value === 'number' ? latestAlert.value : null
+  const readingText = rawReading != null ? `${Math.round(rawReading)}${latestAlert?.sensor === 'flood' ? ' cm' : ''}` : null
+  const rainfall = weather?.rain1h ?? weather?.rain3h
+  const humidity = weather?.humidity
+  const windSpeed = weather?.windSpeed
+
+  const observations: string[] = []
+  if (readingText) {
+    observations.push(`Sensor ${sensorName} shows ${readingText} (${alertLevel} alert).`)
+  }
+  if (typeof rainfall === 'number') {
+    observations.push(`Rainfall over ${location} totals ${rainfall.toFixed(1)} mm this hour.`)
+  }
+  if (typeof humidity === 'number') {
+    observations.push(`Humidity is holding near ${Math.round(humidity)}%.`)
+  }
+  if (typeof windSpeed === 'number' && windSpeed > 0) {
+    observations.push(`Wind near ${location} is around ${Math.round(windSpeed)}.`)
+  }
+  if (observations.length === 0) {
+    observations.push(`Local instruments near ${location} are steady at the moment.`)
+  }
+
+  const riskLabel = (prediction?.riskLevel || 'Low').toLowerCase()
+  const actions: string[] = []
+  if (tone === 'action') {
+    actions.push('Move valuables and family members above ground level immediately.', 'Avoid low crossings and be ready to evacuate if water rises.')
+  } else if (tone === 'watch') {
+    actions.push('Secure drains and gutters so runoff can move freely.', 'Keep your go-bag and contacts ready in case conditions escalate.')
+  } else {
+    actions.push('Do a quick perimeter check for pooling water or blocked drains.', 'Review emergency contacts and share updates with neighbours.')
+  }
+
+  if (readingText) {
+    actions.push(`Log the ${sensorName} reading every 10 minutes to spot any upward trend.`)
+  }
+  if (typeof rainfall === 'number' && rainfall >= 5) {
+    actions.push('Rainfall is building—keep vehicles away from low spots and clear debris from storm drains.')
+  }
+
+  return {
+    tone,
+    headline: `Local sensors indicate ${riskLabel} flood risk right now.`,
+    reassurance: `${observations.join(' ')} We will keep relaying field data continuously.`,
+    actions,
+  }
+}
+
 function pickTone(prediction: FloodRiskResponse | null): Tone {
   if (!prediction) {
     return 'calm'
@@ -44,15 +106,6 @@ function buildAssistantCopy(
   isLoading: boolean,
   riskError: string | null
 ): AssistantCopy {
-  if (riskError) {
-    return {
-      tone: 'watch',
-      headline: 'We had trouble reaching the AI just now.',
-      reassurance: 'Sensors continue to report in, but the assistant response is delayed. We will retry shortly.',
-      actions: ['Refresh the page if the issue persists.', 'Stay alert to manual updates from local authorities.'],
-    }
-  }
-
   if (isLoading) {
     return {
       tone: 'watch',
@@ -63,6 +116,9 @@ function buildAssistantCopy(
   }
 
   const tone = pickTone(prediction)
+  if (riskError) {
+    return buildOfflineCopy(tone, prediction, weather, latestAlert)
+  }
   const sensorName = latestAlert?.sensor ? latestAlert.sensor.toLowerCase() : 'primary sensor'
   const rainfall = weather?.rain1h ?? weather?.rain3h ?? 0
   const windSpeed = weather?.windSpeed ?? 0
