@@ -36,14 +36,6 @@ interface AlertSummaryRequest {
   }>;
 }
 
-interface DeepSeekResponse {
-  choices?: Array<{
-    message?: {
-      content?: string;
-    };
-  }>;
-}
-
 interface GeminiResponse {
   candidates?: Array<{
     content?: {
@@ -64,16 +56,12 @@ const env = ((globalThis as unknown as { process?: { env?: Record<string, string
   string | undefined
 >;
 
-const DEFAULT_GEMINI_MODEL = env.GEMINI_MODEL ?? "gemini-1.5-flash";
-const DEFAULT_DEEPSEEK_MODEL = env.DEEPSEEK_MODEL ?? "deepseek-chat";
-
+const DEFAULT_GEMINI_MODEL = env.GEMINI_MODEL ?? "gemini-2.5-flash";
 const config = functions.config() as {
   gemini?: { api_key?: string };
-  deepseek?: { api_key?: string };
 };
 
 const GEMINI_API_KEY = env.GEMINI_API_KEY ?? config.gemini?.api_key;
-const DEEPSEEK_API_KEY = env.DEEPSEEK_API_KEY ?? config.deepseek?.api_key;
 
 function sanitizeJsonBlock(raw: string | undefined): string {
   if (!raw) return "";
@@ -209,7 +197,7 @@ humidity: ${inputs.humidity}
 temperature: ${inputs.temp}
 trend: ${inputs.trend}`;
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1/models/${DEFAULT_GEMINI_MODEL}:generateContent`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${DEFAULT_GEMINI_MODEL}:generateContent`;
 
   const response = await fetch(endpoint + `?key=${encodeURIComponent(GEMINI_API_KEY)}`, {
     method: "POST",
@@ -252,8 +240,8 @@ trend: ${inputs.trend}`;
   }
 }
 
-async function callDeepSeek(request: AlertSummaryRequest): Promise<string | null> {
-  if (!DEEPSEEK_API_KEY) {
+async function callGeminiSummary(request: AlertSummaryRequest): Promise<string | null> {
+  if (!GEMINI_API_KEY) {
     return null;
   }
 
@@ -265,9 +253,9 @@ async function callDeepSeek(request: AlertSummaryRequest): Promise<string | null
     .join("\n");
 
   const prompt = `You are summarising a live flood monitoring feed for emergency teams. Provide:
-1. A single sentence headline describing the situation.
-2. A short bullet list (2-3 bullets) of recommended actions.
-Respond in markdown with the headline and an unordered list. Avoid extra commentary.
+1. A bold markdown headline describing the situation in <= 120 characters.
+2. A short bullet list (2-3 bullets) of recommended actions written in markdown.
+Respond ONLY in markdown with the headline on the first line followed by the list. Avoid extra commentary.
 
 Context:
 - Flood severity level (1-3): ${request.currentLevel}
@@ -276,32 +264,34 @@ Context:
 - Rainfall in last hour (mm): ${request.rainfall}
 - Recent alerts:\n${alertsDescription || "- None"}`;
 
-  const response = await fetch("https://api.deepseek.com/v1/chat/completions", {
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${DEFAULT_GEMINI_MODEL}:generateContent`;
+
+  const response = await fetch(endpoint + `?key=${encodeURIComponent(GEMINI_API_KEY)}`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: DEFAULT_DEEPSEEK_MODEL,
-      messages: [
-        { role: "system", content: "You write concise, actionable summaries for flood response coordinators." },
-        { role: "user", content: prompt },
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: prompt }],
+        },
       ],
-      temperature: 0.4,
-      max_tokens: 400,
+      generationConfig: {
+        temperature: 0.4,
+      },
     }),
   });
 
   if (!response.ok) {
-    functions.logger.warn("DeepSeek responded with non-OK status", { status: response.status, statusText: response.statusText });
+    functions.logger.warn("Gemini summary responded with non-OK status", { status: response.status, statusText: response.statusText });
     return null;
   }
 
-  const payload = (await response.json()) as DeepSeekResponse;
-  const summary = payload.choices?.[0]?.message?.content?.trim();
+  const payload = (await response.json()) as GeminiResponse;
+  const summary = payload.candidates?.[0]?.content?.parts?.map(part => part.text?.trim() ?? "").join("\n").trim();
   return summary && summary.length > 0 ? summary : null;
 }
+
 
 function fallbackSummary(request: AlertSummaryRequest): string {
   const levelDescriptions: Record<1 | 2 | 3, string> = {
@@ -357,19 +347,26 @@ export const generateAlertSummary = functions
 
     const payload = validateAlertSummaryRequest(data);
 
-    const llmSummary = await callDeepSeek(payload).catch(error => {
-      functions.logger.error("DeepSeek call failed", error);
+    const geminiSummary = await callGeminiSummary(payload).catch(error => {
+      functions.logger.error("Gemini summary call failed", error);
       return null;
     });
 
-    const usedFallback = !llmSummary;
-    const finalSummary = llmSummary ?? fallbackSummary(payload);
+    let source: "gemini" | "fallback" = "gemini";
+    let llmSummary = geminiSummary;
+
+    if (!llmSummary) {
+      llmSummary = fallbackSummary(payload);
+      source = "fallback";
+    }
+
+    const finalSummary = llmSummary;
 
     const docRef = await db.collection(SUMMARY_COLLECTION).add({
       summary: finalSummary,
       payload,
       timestamp: admin.firestore.FieldValue.serverTimestamp(),
-      source: usedFallback ? "fallback" : "deepseek",
+      source,
     });
 
     return { summaryId: docRef.id };

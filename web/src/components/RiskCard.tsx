@@ -17,7 +17,7 @@ export default function RiskCard({ prediction, isLoading, error }: RiskCardProps
   return (
     <section className="risk-card">
       <header className="risk-header">
-        <h2>AI flood risk</h2>
+        <h2>AI flood Risk Detector</h2>
       </header>
 
       {isLoading && <p className="risk-message">Evaluating flood risk…</p>}

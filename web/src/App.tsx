@@ -117,7 +117,7 @@ function buildLocalSummary(payload: AlertSummaryRequest): string {
 
   const alertsSection = alertLines.length > 0 ? `- Recent alerts:\n${alertLines}` : '- Recent alerts: none reported'
 
-  return `**${headline}**\n\n- Water height: ${payload.waterHeight} cm (sensor gap ${payload.distance} cm)\n- Rainfall last hour: ${payload.rainfall} mm\n${alertsSection}\n\n_Local assistant estimate while cloud AI reconnects._`
+  return `**${headline}**\n\n- Water height: ${payload.waterHeight} cm (sensor gap ${payload.distance} cm)\n- Rainfall last hour: ${payload.rainfall} mm\n${alertsSection}`
 }
 
 function pickNumericField(document: AlertDocument, keys: string[]): number | null {

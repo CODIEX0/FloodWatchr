@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react'
+import React, { useMemo, useState } from 'react'
 import type { FloodRiskResponse } from '../services/ai'
 import type { WeatherSnapshot } from './WeatherPanel'
 import type { AlertDocument } from '../firebase'
@@ -11,8 +11,7 @@ interface SafetyAssistantProps {
   riskError: string | null
 }
 
-const ASSISTANT_GIF =
-  'https://media.giphy.com/media/v1.Y2lkPWVjZjA1ZTQ3Zng2czA0ZGpqcXRvbDg0NWVhZzV5N2o3cTVvNm8yb2FpdnQwNHQ0MyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/hrd7JFO6lbJNa5LqVb/giphy.gif'
+const ASSISTANT_GIF = 'https://media4.giphy.com/media/hrd7JFO6lbJNa5LqVb/giphy.gif'
 
 type Tone = 'calm' | 'watch' | 'action'
 
@@ -178,6 +177,7 @@ export default function SafetyAssistant({
   isLoading,
   riskError,
 }: SafetyAssistantProps): React.ReactElement {
+  const [avatarFailed, setAvatarFailed] = useState(false)
   const copy = useMemo(
     () => buildAssistantCopy(prediction, weather, latestAlert, isLoading, riskError),
     [prediction, weather, latestAlert, isLoading, riskError]
@@ -186,11 +186,27 @@ export default function SafetyAssistant({
   return (
     <section className={`assistant-panel assistant-${copy.tone}`}>
       <div className="assistant-avatar">
-        <img src={ASSISTANT_GIF} alt="Animated flood safety assistant" loading="lazy" />
+        {!avatarFailed ? (
+          <img
+            src={ASSISTANT_GIF}
+            alt="Animated flood safety assistant"
+            loading="lazy"
+            onError={() => setAvatarFailed(true)}
+          />
+        ) : (
+          <div className="assistant-avatar-fallback" role="img" aria-label="Flood safety companion avatar">
+            <span className="assistant-avatar-ring" />
+            <span className="assistant-avatar-dot" />
+            <span className="assistant-avatar-label">Flood companion</span>
+          </div>
+        )}
       </div>
       <div className="assistant-body">
         <header className="assistant-header">
-          <h2>Safety Companion AI</h2>
+          <div className="assistant-title-row">
+            <h2>Safety Companion</h2>
+            <span className="assistant-chip">Powered by Google Gemini</span>
+          </div>
           <p className="assistant-headline">{copy.headline}</p>
         </header>
         <p className="assistant-reassurance">{copy.reassurance}</p>
